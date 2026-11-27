@@ -19,13 +19,11 @@ import {
 } from './mockApi';
 
 export function getTopics(): Promise<TopicSummary[]> {
-  if (USE_MOCK_API) return mockGetTopics();
-  return fetchJson<TopicSummary[]>('/api/topics');
+  return mockGetTopics();
 }
 
 export function getTopicBySlug(slug: string): Promise<TopicDetail> {
-  if (USE_MOCK_API) return mockGetTopicBySlug(slug);
-  return fetchJson<TopicDetail>(`/api/topics/${encodeURIComponent(slug)}`);
+  return mockGetTopicBySlug(slug);
 }
 
 export function getDatasets(): Promise<DatasetSummary[]> {
