@@ -148,7 +148,7 @@ export interface TopicSummary {
   slug: string;
   title: string;
   category: string;
-  difficulty: 'Beginner' | 'Intermediate';
+  difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
   summary: string;
   prerequisites: string[];
 }
