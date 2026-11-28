@@ -61,3 +61,21 @@ export function evaluateQuery(
     signal,
   });
 }
+export interface ResetDatabaseResponse {
+  status?: 'success';
+  success?: boolean;
+  message: string;
+}
+
+export function resetDatabase(): Promise<ResetDatabaseResponse> {
+  if (USE_MOCK_API) {
+    return Promise.resolve({
+      status: 'success',
+      success: true,
+      message: 'Database reset to initial university-demo-v1 state (Mock Mode).',
+    });
+  }
+  return fetchJson<ResetDatabaseResponse>('/api/reset', {
+    method: 'POST',
+  });
+}
