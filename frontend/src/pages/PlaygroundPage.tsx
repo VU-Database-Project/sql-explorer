@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeftRight, Eye, Loader2, Sparkles } from 'lucide-react';
+import { ArrowLeftRight, Eye, Loader2, RotateCcw, Sparkles } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { DialectSelector } from '../components/editor/DialectSelector';
 import { SqlEditor } from '../components/editor/SqlEditor';
@@ -14,6 +14,7 @@ import {
   evaluateQuery,
   getDatasetSchema,
   getDatasets,
+  resetDatabase,
 } from '../services/explorerApi';
 import { DEFAULT_DATASET_ID } from '../services/mockData';
 import type {
@@ -41,14 +42,20 @@ const STARTER_PRESETS: Array<{ label: string; dialect: SqlDialect; query: string
     query: 'SELECT TOP 3 Name, CGPA\nFROM Student\nORDER BY CGPA DESC;',
   },
   {
+    label: 'Update CGPA demo',
+    dialect: 'mysql',
+    query: 'UPDATE Student\nSET CGPA = 3.95\nWHERE StudentID = 101;',
+  },
+  {
+    label: 'Insert student demo',
+    dialect: 'mysql',
+    query:
+      "INSERT INTO Student (StudentID, Name, Email, CGPA, DepartmentID)\nVALUES (106, 'Ratul', 'ratul@demo.edu', 3.92, 10);",
+  },
+  {
     label: 'Unknown column test',
     dialect: 'mysql',
     query: 'SELECT * FROM Student WHERE CGPAA > 3.42;',
-  },
-  {
-    label: 'Unsafe query test',
-    dialect: 'mysql',
-    query: 'DROP TABLE Student;',
   },
 ];
 
@@ -78,6 +85,12 @@ export function PlaygroundPage() {
   const [isEvaluating, setIsEvaluating] = useState<boolean>(false);
   const [evalError, setEvalError] = useState<string | null>(null);
   const [showCompareDialects, setShowCompareDialects] = useState<boolean>(false);
+
+  const [isResetting, setIsResetting] = useState<boolean>(false);
+  const [resetNotice, setResetNotice] = useState<{
+    type: 'success' | 'error';
+    text: string;
+  } | null>(null);
 
   // Sync if user navigates here from a new lesson "Try it" click
   useEffect(() => {
@@ -143,22 +156,65 @@ export function PlaygroundPage() {
       resultSnapshot.dialect !== dialect ||
       resultSnapshot.datasetId !== datasetId);
 
+  async function refreshSchema() {
+    try {
+      const updated = await getDatasetSchema(datasetId);
+      setSchema(updated);
+    } catch {
+      // Keep existing schema if refresh fails transiently
+    }
+  }
+
   async function handleRevealResult() {
     if (!canEvaluate) return;
     setIsEvaluating(true);
     setEvalError(null);
+    setResetNotice(null);
 
     const requestPayload = { query, dialect, datasetId };
     try {
       const response = await evaluateQuery(requestPayload);
       setResult(response);
       setResultSnapshot(requestPayload);
+
+      // Automatically refresh Dataset Schema Reference after DDL statements
+      if (/^\s*(CREATE|ALTER|DROP)\b/i.test(query)) {
+        await refreshSchema();
+      }
     } catch (err) {
       setEvalError(
         err instanceof Error ? err.message : 'Unable to evaluate this query.'
       );
     } finally {
       setIsEvaluating(false);
+    }
+  }
+
+  async function handleResetDatabase() {
+    if (isResetting) return;
+    setIsResetting(true);
+    setResetNotice(null);
+    setEvalError(null);
+
+    try {
+      const res = await resetDatabase();
+      await refreshSchema();
+      setResult(null);
+      setResultSnapshot(null);
+      setResetNotice({
+        type: 'success',
+        text: res.message || 'Database restored to initial university-demo-v1 state.',
+      });
+    } catch (err) {
+      setResetNotice({
+        type: 'error',
+        text:
+          err instanceof Error
+            ? err.message
+            : 'Unable to reset database right now.',
+      });
+    } finally {
+      setIsResetting(false);
     }
   }
 
@@ -229,8 +285,43 @@ export function PlaygroundPage() {
             <ArrowLeftRight className="h-3.5 w-3.5" />
             Compare Dialects
           </button>
+
+          <button
+            type="button"
+            onClick={handleResetDatabase}
+            disabled={isResetting}
+            title="Restore all 6 tables and sample rows back to their initial state"
+            className="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+          >
+            {isResetting ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RotateCcw className="h-3.5 w-3.5" />
+            )}
+            {isResetting ? 'Resetting...' : 'Reset Database'}
+          </button>
         </div>
       </div>
+
+      {/* Database Reset Confirmation Banner */}
+      {resetNotice && (
+        <div
+          className={`flex items-center justify-between rounded-lg border px-3.5 py-2 text-xs font-medium ${
+            resetNotice.type === 'success'
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+              : 'border-rose-200 bg-rose-50 text-rose-800'
+          }`}
+        >
+          <span>{resetNotice.text}</span>
+          <button
+            type="button"
+            onClick={() => setResetNotice(null)}
+            className="ml-4 text-xs underline opacity-80 hover:opacity-100"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Optional User-Triggered Compare Dialects Drawer */}
       {showCompareDialects && (
